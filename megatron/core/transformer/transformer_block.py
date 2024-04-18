@@ -3,7 +3,7 @@
 import re
 from contextlib import nullcontext
 from dataclasses import dataclass
-from typing import List, Union
+from typing import List, Union, Dict, Any
 
 import torch
 from torch import Tensor
@@ -158,7 +158,6 @@ class TransformerBlock(MegatronModule):
         rotary_pos_emb: Tensor,
     ):
         """Forward method with activation checkpointing."""
-
         def custom(start: int, end: int):
             def custom_forward(
                 hidden_states, attention_mask, context, context_mask, rotary_pos_emb,
@@ -235,7 +234,8 @@ class TransformerBlock(MegatronModule):
         attention_mask: Tensor,
         context: Tensor = None,
         context_mask: Tensor = None,
-        rotary_pos_emb: Tensor = None,
+        rotary_pos_emb: Any = None, #Tensor = None | Dict[Any, Any],
+        layer_spec_bases: List = None,
         inference_params: InferenceParams = None,
     ):
         # hidden_states (float): [s, b, h]
@@ -307,13 +307,15 @@ class TransformerBlock(MegatronModule):
                     rotary_pos_emb=rotary_pos_emb,
                 )
             else:
-                for layer in self.layers:
+                if layer_spec_bases:
+                    assert len(layer_spec_bases) == len(self.layers)
+                for li, layer in enumerate(self.layers):
                     hidden_states, context = layer(
                         hidden_states=hidden_states,
                         attention_mask=attention_mask,
                         context=context,
                         context_mask=context_mask,
-                        rotary_pos_emb=rotary_pos_emb,
+                        rotary_pos_emb=rotary_pos_emb if type(rotary_pos_emb) is Tensor else rotary_pos_emb[layer_spec_bases[li]],
                         inference_params=inference_params,
                     )
 

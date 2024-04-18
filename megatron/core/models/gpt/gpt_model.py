@@ -81,14 +81,29 @@ class GPTModel(LanguageModule):
             )
 
         if self.position_embedding_type == 'rope':
-            self.rotary_pos_emb = RotaryEmbedding(
-                kv_channels=self.config.kv_channels,
-                rotary_percent=rotary_percent,
-                seq_len_interpolation_factor=seq_len_interpolation_factor,
-                rotary_base=rotary_base,
-                pretrained_max_position_embeddings=pretrained_max_position_embeddings,
-                augment_seq=augment_seq,
-            )
+            if augment_seq and 'base_per_layer' in augment_seq:
+                self.layer_spec_bases = [float(x) for x in augment_seq['base_per_layer'].split(',')]
+                self.rotary_pos_emb = {}  # {base_value: created_rope}
+                for base in set(self.layer_spec_bases):
+                    this_rope = RotaryEmbedding(
+                        kv_channels=self.config.kv_channels,
+                        rotary_percent=rotary_percent,
+                        seq_len_interpolation_factor=seq_len_interpolation_factor,
+                        rotary_base=base,
+                        pretrained_max_position_embeddings=pretrained_max_position_embeddings,
+                        augment_seq=augment_seq,
+                    )
+                    self.rotary_pos_emb[base] = this_rope
+
+            else:
+                self.rotary_pos_emb = RotaryEmbedding(
+                    kv_channels=self.config.kv_channels,
+                    rotary_percent=rotary_percent,
+                    seq_len_interpolation_factor=seq_len_interpolation_factor,
+                    rotary_base=rotary_base,
+                    pretrained_max_position_embeddings=pretrained_max_position_embeddings,
+                    augment_seq=augment_seq,
+                )
 
         # Transformer.
         self.decoder = TransformerBlock(
@@ -163,11 +178,19 @@ class GPTModel(LanguageModule):
 
         # Rotary positional embeddings (embedding is None for PP intermediate devices)
         rotary_pos_emb = None
-        if self.position_embedding_type == 'rope':
+        if self.position_embedding_type == 'rope' and type(self.rotary_pos_emb) is not dict:
             rotary_seq_len = self.rotary_pos_emb.get_rotary_seq_len(
                 inference_params, self.decoder, decoder_input, self.config
             )
             rotary_pos_emb = self.rotary_pos_emb(rotary_seq_len, maybe_augment=training_step)
+        else:
+            rotary_pos_emb = {}
+            for base in self.rotary_pos_emb:
+                rotary_seq_len = self.rotary_pos_emb[base].get_rotary_seq_len(
+                    inference_params, self.decoder, decoder_input, self.config
+                )
+                this_rotary_pos_emb = self.rotary_pos_emb[base](rotary_seq_len, maybe_augment=training_step)
+                rotary_pos_emb[base] = this_rotary_pos_emb
 
         # Run decoder.
         hidden_states = self.decoder(
@@ -175,6 +198,7 @@ class GPTModel(LanguageModule):
             attention_mask=attention_mask,
             inference_params=inference_params,
             rotary_pos_emb=rotary_pos_emb,
+            layer_spec_bases=self.layer_spec_bases,
             **(extra_block_kwargs or {}),
         )
 
