@@ -178,19 +178,21 @@ class GPTModel(LanguageModule):
 
         # Rotary positional embeddings (embedding is None for PP intermediate devices)
         rotary_pos_emb = None
-        if self.position_embedding_type == 'rope' and type(self.rotary_pos_emb) is not dict:
-            rotary_seq_len = self.rotary_pos_emb.get_rotary_seq_len(
-                inference_params, self.decoder, decoder_input, self.config
-            )
-            rotary_pos_emb = self.rotary_pos_emb(rotary_seq_len, maybe_augment=training_step)
-        else:
-            rotary_pos_emb = {}
-            for base in self.rotary_pos_emb:
-                rotary_seq_len = self.rotary_pos_emb[base].get_rotary_seq_len(
+        if self.position_embedding_type == 'rope':
+            if type(self.rotary_pos_emb) is not dict:
+                rotary_seq_len = self.rotary_pos_emb.get_rotary_seq_len(
                     inference_params, self.decoder, decoder_input, self.config
                 )
-                this_rotary_pos_emb = self.rotary_pos_emb[base](rotary_seq_len, maybe_augment=training_step)
-                rotary_pos_emb[base] = this_rotary_pos_emb
+                rotary_pos_emb = self.rotary_pos_emb(rotary_seq_len, maybe_augment=training_step)
+            else:
+                # logging.info("Using layerspecific base freqs")
+                rotary_pos_emb = {}
+                for base in self.rotary_pos_emb:
+                    rotary_seq_len = self.rotary_pos_emb[base].get_rotary_seq_len(
+                        inference_params, self.decoder, decoder_input, self.config
+                    )
+                    this_rotary_pos_emb = self.rotary_pos_emb[base](rotary_seq_len, maybe_augment=training_step)
+                    rotary_pos_emb[base] = this_rotary_pos_emb
 
         # Run decoder.
         hidden_states = self.decoder(
