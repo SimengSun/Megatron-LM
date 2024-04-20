@@ -82,7 +82,9 @@ class GPTModel(LanguageModule):
 
         if self.position_embedding_type == 'rope':
             if augment_seq and 'base_per_layer' in augment_seq:
+                logging.info(augment_seq)
                 self.layer_spec_bases = [float(x) for x in augment_seq['base_per_layer'].split(',')]
+                logging.info(self.layer_spec_bases)
                 self.rotary_pos_emb = {}  # {base_value: created_rope}
                 for base in set(self.layer_spec_bases):
                     this_rope = RotaryEmbedding(
@@ -185,7 +187,7 @@ class GPTModel(LanguageModule):
                 )
                 rotary_pos_emb = self.rotary_pos_emb(rotary_seq_len, maybe_augment=training_step)
             else:
-                # logging.info("Using layerspecific base freqs")
+                logging.info("Using layerspecific base freqs")
                 rotary_pos_emb = {}
                 for base in self.rotary_pos_emb:
                     rotary_seq_len = self.rotary_pos_emb[base].get_rotary_seq_len(
