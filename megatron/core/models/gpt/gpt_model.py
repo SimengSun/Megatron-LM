@@ -81,6 +81,8 @@ class GPTModel(LanguageModule):
             )
 
         if self.position_embedding_type == 'rope':
+            logging.info("found position embedding is rope")
+            self.layer_spec_bases = None
             if augment_seq and 'base_per_layer' in augment_seq:
                 logging.info(augment_seq)
                 self.layer_spec_bases = [float(x) for x in augment_seq['base_per_layer'].split(',')]
